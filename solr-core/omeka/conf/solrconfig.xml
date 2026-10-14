@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  SolrSearch (Omeka Classic) solrconfig for Apache Solr 10.
+
+  Works both for a standalone ("user-managed") core and as a SolrCloud configset.
+  The plugin only talks to /select, /update and /admin/ping; /update, /admin/ping,
+  /get and the admin handlers are implicit in Solr 10, so they are not declared here.
+
+  Replaces the Solr 4.6-era config, which Solr 10 refuses to load (removed classes:
+  admin.AdminHandlers, JsonUpdateRequestHandler, CSVRequestHandler, XSLTResponseWriter;
+  <lib> and <jmx> are no longer supported).
+-->
+<config>
+
+  <!-- Lucene version Solr 10.0 ships with. On Solr 9.x use 9.12 (or that release's version). -->
+  <luceneMatchVersion>10.3</luceneMatchVersion>
+
+  <dataDir>${solr.data.dir:}</dataDir>
+
+  <directoryFactory name="DirectoryFactory" class="${solr.directoryFactory:solr.NRTCachingDirectoryFactory}"/>
+
+  <codecFactory class="solr.SchemaCodecFactory"/>
+
+  <!-- The schema is the hand-maintained schema.xml in this directory (not a managed schema). -->
+  <schemaFactory class="ClassicIndexSchemaFactory"/>
+
+  <indexConfig>
+    <lockType>${solr.lock.type:native}</lockType>
+  </indexConfig>
+
+  <updateHandler class="solr.DirectUpdateHandler2">
+    <!-- Transaction log: needed for SolrCloud and real-time get. -->
+    <updateLog>
+      <str name="dir">${solr.ulog.dir:}</str>
+    </updateLog>
+    <!-- Hard commits flush to disk without opening a new searcher. The plugin
+         sends an explicit commit after every change, so no soft autocommit is needed. -->
+    <autoCommit>
+      <maxTime>${solr.autoCommit.maxTime:15000}</maxTime>
+      <openSearcher>false</openSearcher>
+    </autoCommit>
+    <autoSoftCommit>
+      <maxTime>${solr.autoSoftCommit.maxTime:-1}</maxTime>
+    </autoSoftCommit>
+  </updateHandler>
+
+  <query>
+    <maxBooleanClauses>${solr.max.booleanClauses:1024}</maxBooleanClauses>
+    <filterCache size="512" initialSize="512" autowarmCount="0"/>
+    <queryResultCache size="512" initialSize="512" autowarmCount="0"/>
+    <documentCache size="512" initialSize="512" autowarmCount="0"/>
+    <enableLazyFieldLoading>true</enableLazyFieldLoading>
+    <queryResultWindowSize>20</queryResultWindowSize>
+    <queryResultMaxDocsCached>200</queryResultMaxDocsCached>
+    <useColdSearcher>false</useColdSearcher>
+  </query>
+
+  <requestDispatcher>
+    <httpCaching never304="true"/>
+  </requestDispatcher>
+
+  <!-- Search handler used by the plugin. Queries go against the catch-all "text" field;
+       highlighting uses Solr's default (unified) highlighter, configured by request params. -->
+  <requestHandler name="/select" class="solr.SearchHandler">
+    <lst name="defaults">
+      <str name="echoParams">explicit</str>
+      <int name="rows">10</int>
+      <str name="df">text</str>
+    </lst>
+  </requestHandler>
+
+  <!-- Same as /select, kept for compatibility with tools that use /query. -->
+  <requestHandler name="/query" class="solr.SearchHandler">
+    <lst name="defaults">
+      <str name="echoParams">explicit</str>
+      <str name="wt">json</str>
+      <str name="indent">true</str>
+      <str name="df">text</str>
+    </lst>
+  </requestHandler>
+
+  <!-- Default update chain. Facet values (*_s, string fields with docValues) are capped so a very
+       long element text that someone marks as a facet can't make Solr reject the whole document
+       ("immense term"): Lucene's per-term limit is 32766 bytes. -->
+  <updateRequestProcessorChain name="omeka" default="true">
+    <processor class="solr.TruncateFieldUpdateProcessorFactory">
+      <str name="fieldRegex">.*_s</str>
+      <int name="maxLength">8000</int>
+    </processor>
+    <processor class="solr.LogUpdateProcessorFactory"/>
+    <processor class="solr.DistributedUpdateProcessorFactory"/>
+    <processor class="solr.RunUpdateProcessorFactory"/>
+  </updateRequestProcessorChain>
+
+</config>

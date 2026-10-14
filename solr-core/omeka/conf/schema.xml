@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  SolrSearch (Omeka Classic) schema for Apache Solr 10.
+
+  Field names and field semantics are unchanged from the original SolrSearch
+  schema, so existing plugin code and existing facet/field settings keep working.
+  What changed for Solr 9/10:
+    * removed field types whose classes no longer exist (Trie*, LatLonType,
+      CurrencyField, PointType, ...) and the unused language/example types;
+    * numeric types are Point-based; _version_ is a docValues-only plong;
+    * schema version 1.7: string/boolean fields get docValues by default,
+      which is what faceting and sorting use;
+    * query-time synonyms use SynonymGraphFilter (SynonymFilter is deprecated).
+
+  After switching to this schema you must reindex from Omeka
+  (Solr Search > Index > Clear and Reindex); an index built by an older Solr
+  cannot be read by Solr 10 anyway.
+-->
+<schema name="SolrSearch" version="1.7">
+
+  <!-- ===================================================== fields -->
+
+  <field name="id"         type="string"  indexed="true"  stored="true" required="true" multiValued="false"/>
+  <field name="_version_"  type="plong"   indexed="false" stored="false"/>
+
+  <!-- Record title, used for display in the result list -->
+  <field name="title"      type="text_en" indexed="true"  stored="true" multiValued="true"/>
+
+  <!-- "Omeka categories" facets -->
+  <field name="tag"        type="string"  indexed="true"  stored="true" multiValued="true"/>
+  <field name="collection" type="string"  indexed="true"  stored="true"/>
+  <field name="itemtype"   type="string"  indexed="true"  stored="true"/>
+  <field name="resulttype" type="string"  indexed="true"  stored="true"/>
+  <field name="featured"   type="boolean" indexed="true"  stored="true"/>
+  <field name="public"     type="boolean" indexed="true"  stored="true"/>
+
+  <!-- Which Omeka record a document came from (display only) -->
+  <field name="model"      type="string"  indexed="false" stored="true" docValues="false"/>
+  <field name="modelid"    type="string"  indexed="false" stored="true" docValues="false"/>
+
+  <!-- Catch-all search field (default field for queries) -->
+  <field name="text"       type="text_en" indexed="true"  stored="false" multiValued="true"/>
+
+  <!-- Element texts: <element id>_t is the searchable text, <element id>_s the facet value.
+       Add-on records (Simple Pages, Exhibits) use <addon>_<field>_t. -->
+  <dynamicField name="*_t" type="text_en" indexed="true" stored="true" multiValued="true"/>
+  <dynamicField name="*_s" type="string"  indexed="true" stored="true" multiValued="true"/>
+
+  <uniqueKey>id</uniqueKey>
+
+  <copyField source="*_t"        dest="text"/>
+  <copyField source="tag"        dest="text"/>
+  <copyField source="collection" dest="text"/>
+  <copyField source="itemtype"   dest="text"/>
+  <copyField source="resulttype" dest="text"/>
+  <copyField source="title"      dest="text"/>
+
+  <!-- ===================================================== field types -->
+
+  <fieldType name="string"  class="solr.StrField"  sortMissingLast="true"/>
+  <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true"/>
+
+  <fieldType name="pint"    class="solr.IntPointField"/>
+  <fieldType name="plong"   class="solr.LongPointField"/>
+  <fieldType name="pfloat"  class="solr.FloatPointField"/>
+  <fieldType name="pdouble" class="solr.DoublePointField"/>
+  <fieldType name="pdate"   class="solr.DatePointField"/>
+
+  <fieldType name="ignored" class="solr.StrField" indexed="false" stored="false" docValues="false" multiValued="true"/>
+
+  <!-- General text: tokenize, stop words, lowercase; query-time synonyms -->
+  <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100" multiValued="true">
+    <analyzer type="index">
+      <tokenizer name="standard"/>
+      <filter name="stop" ignoreCase="true" words="stopwords.txt"/>
+      <filter name="lowercase"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer name="standard"/>
+      <filter name="stop" ignoreCase="true" words="stopwords.txt"/>
+      <filter name="synonymGraph" synonyms="synonyms.txt" ignoreCase="true" expand="true"/>
+      <filter name="lowercase"/>
+    </analyzer>
+  </fieldType>
+
+  <!-- English text (the type SolrSearch uses): same analysis chain as the original schema -->
+  <fieldType name="text_en" class="solr.TextField" positionIncrementGap="100">
+    <analyzer type="index">
+      <tokenizer name="standard"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer name="standard"/>
+      <filter name="synonymGraph" synonyms="synonyms.txt" ignoreCase="true" expand="true"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+  </fieldType>
+
+  <!-- English text variants with subject/geographic synonym lists, carried over from the
+       original schema (not used by any field by default; point a field at one to use it). -->
+  <fieldType name="text_en_synonymsLcsh" class="solr.TextField" positionIncrementGap="100">
+    <analyzer type="index">
+      <tokenizer name="standard"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer name="standard"/>
+      <filter name="synonymGraph" synonyms="synonymsLcsh.txt" ignoreCase="true" expand="true"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+  </fieldType>
+
+  <fieldType name="text_en_synonymsStateLcsh" class="solr.TextField" positionIncrementGap="100">
+    <analyzer type="index">
+      <tokenizer name="standard"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer name="standard"/>
+      <filter name="synonymGraph" synonyms="synonymsState.txt,synonymsLcsh.txt" ignoreCase="true" expand="true"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+  </fieldType>
+
+  <fieldType name="text_en_synonymsLcshIso" class="solr.TextField" positionIncrementGap="100">
+    <analyzer type="index">
+      <tokenizer name="standard"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer name="standard"/>
+      <filter name="synonymGraph" synonyms="synonymsLcsh.txt,synonymsIso.txt" ignoreCase="true" expand="true"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+  </fieldType>
+
+  <fieldType name="text_en_synonymsState" class="solr.TextField" positionIncrementGap="100">
+    <analyzer type="index">
+      <tokenizer name="standard"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer name="standard"/>
+      <filter name="synonymGraph" synonyms="synonymsState.txt" ignoreCase="true" expand="true"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+  </fieldType>
+
+  <fieldType name="text_en_synonymsIso" class="solr.TextField" positionIncrementGap="100">
+    <analyzer type="index">
+      <tokenizer name="standard"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer name="standard"/>
+      <filter name="synonymGraph" synonyms="synonymsIso.txt" ignoreCase="true" expand="true"/>
+      <filter name="stop" ignoreCase="true" words="lang/stopwords_en.txt"/>
+      <filter name="lowercase"/>
+      <filter name="englishPossessive"/>
+      <filter name="keywordMarker" protected="protwords.txt"/>
+      <filter name="porterStem"/>
+    </analyzer>
+  </fieldType>
+
+</schema>
